@@ -1,0 +1,1 @@
+docker build -t gimral/redis-cli:1.0 .

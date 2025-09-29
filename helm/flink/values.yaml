@@ -1,0 +1,68 @@
+image: gimral/flink
+imageTag: 2.0.0
+imagePullPolicy: IfNotPresent
+
+resources:
+  jobmanager:
+    limits:
+      cpu: 1000m
+      memory: 2048Mi
+    requests:
+      cpu: 1000m
+      memory: 1280Mi
+  taskmanager:
+    limits:
+      memory: 1280Mi
+    requests:
+      memory: 1280Mi
+
+flink:
+  jobmanager_heap_mb: 1024
+  taskmanager_heap_mb: 1024
+  num_taskmanagers: 1
+  num_slots_per_taskmanager: 1
+
+  # Other config options for flink-conf.yaml
+  config: |
+   jobmanager.bind-host: 0.0.0.0
+   taskmanager.bind-host: 0.0.0.0
+   taskmanager.numberOfTaskSlots: 1
+   parallelism.default: 1
+   jobmanager.execution.failover-strategy: region
+   jobmanager.rpc.address: localhost
+   rest.address: 0.0.0.0
+   jobmanager.memory.process.size: 1600m
+   jobmanager.rpc.port: 6123
+   taskmanager.memory.process.size: 1600m
+   env.java.opts.all: --add-exports=java.base/sun.net.util=ALL-UNNAMED --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
+   high-availability.type: kubernetes
+   high-availability.storageDir: /opt/flink/ha
+   kubernetes.cluster-id: flink-cluster
+  
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+
+# Redis init container to gate JobManager startup
+redis:
+  init:
+    enabled: true
+    # comma or space separated list of redis hosts; if empty will use REDIS_HOST from below
+    hosts: ""
+    # single host fallback (can be comma-separated)
+    host: redis-stack.default.svc.cluster.local
+    port: 6379
+    password: ""
+    db: 0
+    key: "flink-cluster-site:cluster-a"
+    expected: "WEST"
+    retries: 1000
+    interval: 2
+    # image that provides redis-cli and sh; keep small. If your init container image contains the script, use that.
+    image: gimral/redis-cli
+    imageTag: "1.0"
+    # path inside the image where the check script is mounted; we'll mount the script from the chart root
+    scriptPath: /usr/local/bin/init-check.sh
+    # path where the cluster ConfigMap will be mounted inside the pod
+    configMapPath: /etc/flink-cluster-config

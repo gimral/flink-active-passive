@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-taskmanager
+  labels:
+    app.kuberbetes.io/name: {{template "name" . }}
+    app.kuberbetes.io/instance: {{ .Release.Name }}
+    component: taskmanager
+spec:
+  replicas: {{ .Values.flink.num_taskmanagers }}
+  selector:
+    matchLabels:
+      app.kuberbetes.io/name: {{template "name" . }}
+      app.kuberbetes.io/instance: {{ .Release.Name }}
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app.kuberbetes.io/name: {{template "name" . }}
+        app.kuberbetes.io/instance: {{ .Release.Name }}
+        component: taskmanager
+    spec:
+      serviceAccountName: {{ if .Values.serviceAccount.name }}{{ .Values.serviceAccount.name }}{{ else }}{{ include "fullname" . }}-sa{{ end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      containers:
+      - name: taskmanager
+        image: {{ .Values.image }}:{{ .Values.imageTag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        workingDir: /opt/flink
+        # command: ["/bin/bash", "-c", "$FLINK_HOME/bin/taskmanager.sh start; \
+        #   while :;
+        #   do
+        #     if [[ -f $(find log -name '*taskmanager*.log' -print -quit) ]];
+        #       then tail -f -n +1 log/*taskmanager*.log;
+        #     fi;
+        #   done"]
+        # args:
+        # - taskmanager
+        args: ["taskmanager"]
+        ports:
+        - name: data
+          containerPort: 6121
+        - name: rpc
+          containerPort: 6122
+        - name: query
+          containerPort: 6125
+        env:
+        - name: FLINK_CONF_DIR
+          value: /etc/flink
+        - name: FLINK_ENV_JAVA_OPTS
+          value: {{ .Values.flink.javaOpts | quote}}
+        resources:
+          limits:
+            cpu: {{ .Values.flink.num_slots_per_taskmanager }}
+            memory: {{ .Values.resources.taskmanager.limits.memory }}
+          requests:
+            cpu: {{ .Values.flink.num_slots_per_taskmanager }}
+            memory: {{ .Values.resources.taskmanager.requests.memory }}
+        volumeMounts:
+        - name: {{ template "fullname" . }}-flink-config
+          mountPath: /etc/flink
+      volumes:
+        - name: {{ template "fullname" . }}-flink-config
+          configMap:
+            name: {{ template "fullname" . }}-flink-config

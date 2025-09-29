@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}-jobmanager
+  labels:
+    app.kuberbetes.io/name: {{template "name" . }}
+    app.kuberbetes.io/instance: {{ .Release.Name }}
+    component: jobmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kuberbetes.io/name: {{template "name" . }}
+      app.kuberbetes.io/instance: {{ .Release.Name }}
+      component: jobmanager
+  template:
+    metadata:
+      labels:
+        app.kuberbetes.io/name: {{template "name" . }}
+        app.kuberbetes.io/instance: {{ .Release.Name }}
+        component: jobmanager
+    spec:
+      serviceAccountName: {{ if .Values.serviceAccount.name }}{{ .Values.serviceAccount.name }}{{ else }}{{ include "fullname" . }}-sa{{ end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- if .Values.redis.init.enabled }}
+      initContainers:
+      - name: redis-init-check
+        image: {{ .Values.redis.init.image }}:{{ .Values.redis.init.imageTag }}
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c", "{{ .Values.redis.init.scriptPath }} -H '{{ if .Values.redis.init.hosts }}{{ .Values.redis.init.hosts }}{{ else }}{{ .Values.redis.init.host }}{{ end }}' -P {{ .Values.redis.init.port }} -a '{{ .Values.redis.init.password }}' -n {{ .Values.redis.init.db }} -k '{{ .Values.redis.init.key }}' -e '{{ .Values.redis.init.expected }}' -r {{ .Values.redis.init.retries }} -i {{ .Values.redis.init.interval }}"]
+        env:
+        - name: REDIS_HOSTS
+          value: "{{ .Values.redis.init.hosts }}"
+        - name: REDIS_HOST
+          value: "{{ .Values.redis.init.host }}"
+        - name: REDIS_PORT
+          value: "{{ .Values.redis.init.port }}"
+        - name: REDIS_PASSWORD
+          value: "{{ .Values.redis.init.password }}"
+        - name: REDIS_DB
+          value: "{{ .Values.redis.init.db }}"
+        - name: KEY
+          value: "{{ .Values.redis.init.key }}"
+        - name: EXPECTED
+          value: "{{ .Values.redis.init.expected }}"
+        - name: RETRIES
+          value: "{{ .Values.redis.init.retries }}"
+        - name: INTERVAL
+          value: "{{ .Values.redis.init.interval }}"
+        - name: CONFIG_MAP_PATH
+          value: "{{ .Values.redis.init.configMapPath }}"
+        # mount the cluster config so the init container can read cluster settings
+        volumeMounts:
+        - name: flink-cluster-cluster-config-map
+          mountPath: /etc/flink-cluster-config
+          readOnly: true
+      {{- end }}
+      containers:
+      - name: jobmanager
+        image: {{ .Values.image }}:{{ .Values.imageTag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        # args:
+        # - jobmanager
+        workingDir: /opt/flink
+        args: ["jobmanager"]
+        # command: ["/bin/bash", "-c", "$FLINK_HOME/bin/jobmanager.sh start;\
+        #   while :;
+        #   do
+        #     if [[ -f $(find log -name '*jobmanager*.log' -print -quit) ]];
+        #       then tail -f -n +1 log/*jobmanager*.log;
+        #     fi;
+        #   done"]
+        ports:
+        - containerPort: 6123
+          name: rpc
+        - containerPort: 6124
+          name: blob
+        - containerPort: 8081
+          name: ui
+        env:
+        - name: FLINK_CONF_DIR
+          value: /etc/flink
+        - name: FLINK_ENV_JAVA_OPTS
+          value: {{ .Values.flink.javaOpts | quote}}
+        livenessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 60
+        resources:
+          limits:
+            cpu: {{ .Values.resources.jobmanager.limits.cpu }}
+            memory: {{ .Values.resources.jobmanager.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.jobmanager.requests.cpu }}
+            memory: {{ .Values.resources.jobmanager.requests.memory }}
+        volumeMounts:
+        - name: {{ template "fullname" . }}-flink-config
+          mountPath: /etc/flink
+      volumes:
+        - name: {{ template "fullname" . }}-flink-config
+          configMap:
+            name: {{ template "fullname" . }}-flink-config
+        - name: flink-cluster-cluster-config-map
+          configMap:
+            name: flink-cluster-cluster-config-map
+            defaultMode: 0444
+            optional: true
