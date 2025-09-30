@@ -27,10 +27,10 @@ Exit codes:
 Examples:
   # simple single check
   CHECK_REDIS_HOST=redis CHECK_REDIS_KEY=mykey CHECK_REDIS_EXPECTED=ready \ 
-    sh ./check-redis-key.sh
+    sh ./init-check.sh
 
   # using flags and retrying
-  sh ./check-redis-key.sh -H redis -P 6379 -k mykey -e ready -r 5 -i 2
+  sh ./init-check.sh -H redis -P 6379 -k mykey -e ready -r 5 -i 2
 EOF
   exit 1
 }
