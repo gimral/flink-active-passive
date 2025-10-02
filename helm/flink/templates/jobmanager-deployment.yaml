@@ -27,7 +27,7 @@ spec:
       - name: redis-init-check
         image: {{ .Values.redis.init.image }}:{{ .Values.redis.init.imageTag }}
         imagePullPolicy: IfNotPresent
-        command: ["sh", "-c", "{{ .Values.redis.init.scriptPath }} -H '{{ if .Values.redis.init.hosts }}{{ .Values.redis.init.hosts }}{{ else }}{{ .Values.redis.init.host }}{{ end }}' -P {{ .Values.redis.init.port }} -a '{{ .Values.redis.init.password }}' -n {{ .Values.redis.init.db }} -k '{{ .Values.redis.init.key }}' -e '{{ .Values.redis.init.expected }}' -r {{ .Values.redis.init.retries }} -i {{ .Values.redis.init.interval }}"]
+        command: ["sh", "-c", "{{ .Values.redis.init.scriptPath }}]
         env:
         - name: REDIS_HOSTS
           value: "{{ .Values.redis.init.hosts }}"

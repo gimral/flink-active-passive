@@ -19,6 +19,12 @@ Options:
   -r RETRIES     Number of attempts (default: 1) (or RETRIES)
   -i INTERVAL    Seconds between retries (default: 1) (or INTERVAL)
   -h             Show this help
+  TLS options (via env):
+  REDIS_TLS=1            Enable TLS/SSL for redis-cli (non-empty enables TLS)
+  REDIS_TLS_CA=/path/ca.pem   CA certificate file for server verification
+  REDIS_TLS_CERT=/path/cert.pem  Client certificate (optional)
+  REDIS_TLS_KEY=/path/key.pem    Client private key (optional)
+  REDIS_TLS_INSECURE=1   Pass --insecure to redis-cli (skip cert hostname validation)
 
 Exit codes:
   0 - key exists and value equals EXPECTED
@@ -47,6 +53,13 @@ EXPECTED=${EXPECTED:-}
 RETRIES=${RETRIES:-1}
 INTERVAL=${INTERVAL:-1}
 CONFIG_MAP_PATH=${CONFIG_MAP_PATH:-/etc/flink-cluster-config}
+
+# TLS settings for redis-cli
+REDIS_TLS=${REDIS_TLS:-}
+REDIS_TLS_CA=${REDIS_TLS_CA:-}
+REDIS_TLS_CERT=${REDIS_TLS_CERT:-}
+REDIS_TLS_KEY=${REDIS_TLS_KEY:-}
+REDIS_TLS_INSECURE=${REDIS_TLS_INSECURE:-}
 
 # allow flag overrides
 while [ "$#" -gt 0 ]; do
@@ -156,11 +169,31 @@ while :; do
 
   # Execute redis-cli and capture stdout (value) and stderr (err) into a temp file to report diagnostics
   tmperr=$(mktemp /tmp/redis_err.XXXXXX 2>/dev/null || printf '/tmp/redis_err.%s' "$$")
+  # build TLS args if requested
+  TLS_ARGS=""
+  if [ -n "$REDIS_TLS" ] && [ "$REDIS_TLS" != "0" ]; then
+    TLS_ARGS="--tls"
+    if [ -n "$REDIS_TLS_CA" ]; then
+      TLS_ARGS="$TLS_ARGS --cacert $REDIS_TLS_CA"
+    fi
+    if [ -n "$REDIS_TLS_CERT" ]; then
+      TLS_ARGS="$TLS_ARGS --cert $REDIS_TLS_CERT"
+    fi
+    if [ -n "$REDIS_TLS_KEY" ]; then
+      TLS_ARGS="$TLS_ARGS --key $REDIS_TLS_KEY"
+    fi
+    if [ -n "$REDIS_TLS_INSECURE" ] && [ "$REDIS_TLS_INSECURE" != "0" ]; then
+      TLS_ARGS="$TLS_ARGS --insecure"
+    fi
+  fi
+
   if [ -n "$REDIS_PASSWORD" ]; then
-    value=$(redis-cli -h "$chosen_host" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" -n "$REDIS_DB" GET "$KEY" 2>"$tmperr")
+    # shellcheck disable=SC2086
+    value=$(redis-cli -h "$chosen_host" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" -n "$REDIS_DB" $TLS_ARGS GET "$KEY" 2>"$tmperr")
     rc=$?
   else
-    value=$(redis-cli -h "$chosen_host" -p "$REDIS_PORT" -n "$REDIS_DB" GET "$KEY" 2>"$tmperr")
+    # shellcheck disable=SC2086
+    value=$(redis-cli -h "$chosen_host" -p "$REDIS_PORT" -n "$REDIS_DB" $TLS_ARGS GET "$KEY" 2>"$tmperr")
     rc=$?
   fi
   err=$(cat "$tmperr" 2>/dev/null || printf '')
